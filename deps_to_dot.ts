@@ -131,7 +131,6 @@ for (let file in deps) {
     }
     backDeps[x].push(file);
   });
-  metrics[file] = {}
 }
 
 let heights = {};
@@ -160,7 +159,7 @@ function findMetrics(node, depth) {
   metrics[node] = {
     depth: depth,
     height: Math.max(...children.map((x) => x.height)) + 1,
-    weight: children.map((x) => x.weight).reduce((a,b) => a+b, 0),
+    weight: children.map((x) => x.weight).reduce((a,b) => a+b, 0) + 1,
   };
   return metrics[node];
 }
@@ -170,8 +169,8 @@ findMetrics("app.js", 0);
 
 let graphSettings = `
   graph [
-    nodesep=0.5;
-    ranksep=0.6
+    nodesep=0.4;
+    ranksep=0.7
     rankdir=LR
     concentrate=true
     splines=true
@@ -190,20 +189,49 @@ let graphSettings = `
   ]
 `
 
+function toHex(d) {
+  return  ("0"+(Number(d).toString(16))).slice(-2).toUpperCase()
+}
+
+let max = metrics["app.js"].weight;
+function logScale(d) {
+  let base = 1/max;
+  return -1 * (Math.log(d) - Math.log(base)) / Math.log(base);
+}
+
 // Print out the dot file
 console.log('digraph G {');
 console.log(graphSettings);
 for (let file in metrics) {
-  
-  if (metrics[file].height == 0) {
-    console.log(`  "${file}" [style=filled;color=cyan]`);
-  } else if (metrics[file].height == 1) {
-    console.log(`  "${file}" [style=filled;color=lightblue]`);
-  }
+  let weight = metrics[file].weight;
+  let scaledWeight = logScale(weight / max);
+  let redness = toHex(255-Math.round(255 * scaledWeight))
+  console.log(`  "${file}" [style="rounded,filled";shape="record";fillcolor="#FF${redness}${redness}";label="{ ${file} | ${metrics[file].height} }"]`);
 }
+
+function groupBy(filter) {
+  console.log('  {');
+  console.log('    rank=same;');
+  for (let file in metrics) {
+    if (filter(metrics[file])) {
+      console.log(`  "${file}";`);
+    }
+  }
+  console.log('  }');
+}
+
+/*
+Example of using groupby - doesn't actually make it clearer, though.
+groupBy((x) => x.height >= 3 );
+groupBy((x) => x.height == 1 || x.height == 2);
+groupBy((x) => x.height == 0 );
+*/
+
 for (let file in deps) {
   // Collapse ranks
-  deps[file].forEach((x) => console.log(`  "${file}" -> "${x}";`));
+  if (metrics[file]) {
+    deps[file].forEach((x) => console.log(`  "${file}" -> "${x}";`));
+  }
 }
 console.log('}');
 
